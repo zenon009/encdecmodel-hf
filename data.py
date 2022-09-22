@@ -4,6 +4,9 @@ import torch.utils.data as data
 from torch.nn.utils.rnn import pad_sequence
 import os
 
+from tqdm.auto import tqdm
+
+
 class TranslationDataset(data.Dataset):
 
     def __init__(self, inp_file, targ_file, inp_tokenizer, targ_tokenizer, inp_maxlength, targ_maxlength):
@@ -19,19 +22,20 @@ class TranslationDataset(data.Dataset):
 
         # Read the EN lines
         num_inp_lines = 0
-        with open(inp_file, "r") as ef:
-            for line in ef:
-                enc = self.inp_tokenizer.encode(line.strip(), add_special_tokens=True, max_length=self.inp_maxlength)
-                self.encoded_inp.append(torch.tensor(enc))
-                num_inp_lines += 1
+        for index in tqdm(range(len(inp_file)), position=0, leave=True):
+            line = inp_file[index]
+            enc = self.inp_tokenizer.encode(line.strip(), add_special_tokens=True)
+            dec = self.inp_tokenizer.decode(enc)
+            self.encoded_inp.append(torch.tensor(enc))
+            num_inp_lines += 1
 
         # read the DE lines
         num_targ_lines = 0
-        with open(targ_file, "r") as df:
-            for line in df:
-                enc = self.targ_tokenizer.encode(line.strip(), add_special_tokens=True, max_length=self.targ_maxlength)
-                self.encoded_targ.append(torch.tensor(enc))
-                num_targ_lines += 1
+        for index in tqdm(range(len(targ_file)), position=0, leave=True):
+            line = targ_file[index]
+            enc = self.targ_tokenizer.encode(line.strip(), add_special_tokens=True, max_length=self.targ_maxlength)
+            self.encoded_targ.append(torch.tensor(enc))
+            num_targ_lines += 1
 
         assert (num_inp_lines==num_targ_lines), "Mismatch in EN and DE lines"
         print("Read", num_inp_lines, "lines from EN and DE files.")

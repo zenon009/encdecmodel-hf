@@ -5,94 +5,46 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from tqdm.auto import tqdm
 
 from data import TranslationDataset
-from transformers import BertTokenizerFast
+from transformers import BertTokenizerFast, BertLMHeadModel
 from transformers import BertModel, BertForMaskedLM, BertConfig, EncoderDecoderModel
+from sklearn.model_selection import train_test_split
 
-# Identify the config file
-if len(sys.argv) < 2:
-    print("No config file specified. Using the default config.")
-    configfile = "config.json"
-else:
-    configfile = sys.argv[1]
+def get_model():
+    vocabsize = encparams["vocab_size"]
+    max_length = encparams["max_length"]
 
-# Read the params
-with open(configfile, "r") as f:
-    config = json.load(f)
+    encoder_config = BertConfig(vocab_size=vocabsize,
+                                max_position_embeddings=max_length + 64,  # this shuold be some large value
+                                num_attention_heads=encparams["num_attn_heads"],
+                                num_hidden_layers=encparams["num_hidden_layers"],
+                                hidden_size=encparams["hidden_size"],
+                                type_vocab_size=1)
 
-globalparams = config["global_params"]
-encparams = config["encoder_params"]
-decparams = config["decoder_params"]
-modelparams = config["model_params"]
+    encoder = BertModel(config=encoder_config)
 
-# Load the tokenizers
-en_tok_path = encparams["tokenizer_path"]
-en_tokenizer = BertTokenizerFast(os.path.join(en_tok_path, "vocab.txt"))
-de_tok_path = decparams["tokenizer_path"]
-de_tokenizer = BertTokenizerFast(os.path.join(de_tok_path, "vocab.txt"))
+    vocabsize = decparams["vocab_size"]
+    max_length = decparams["max_length"]
+    decoder_config = BertConfig(vocab_size=vocabsize,
+                                max_position_embeddings=max_length + 64,  # this shuold be some large value
+                                num_attention_heads=decparams["num_attn_heads"],
+                                num_hidden_layers=decparams["num_hidden_layers"],
+                                hidden_size=decparams["hidden_size"],
+                                type_vocab_size=1,
+                                is_decoder=True,
+                                add_cross_attention=True)  # Very Important
 
-# Init the dataset
-train_en_file = globalparams["train_en_file"]
-train_de_file = globalparams["train_de_file"]
-valid_en_file = globalparams["valid_en_file"]
-valid_de_file = globalparams["valid_de_file"]
+    decoder = BertLMHeadModel(config=decoder_config)
 
-enc_maxlength = encparams["max_length"]
-dec_maxlength = decparams["max_length"]
+    # Define encoder decoder model
+    model = EncoderDecoderModel(encoder=encoder, decoder=decoder)
+    model.to(device)
+    return model
 
-batch_size = modelparams["batch_size"]
-train_dataset = TranslationDataset(train_en_file, train_de_file, en_tokenizer, de_tokenizer, enc_maxlength, dec_maxlength)
-train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=False, \
-                                                drop_last=True, num_workers=1, collate_fn=train_dataset.collate_function)
 
-valid_dataset = TranslationDataset(valid_en_file, valid_de_file, en_tokenizer, de_tokenizer, enc_maxlength, dec_maxlength)
-valid_dataloader = torch.utils.data.DataLoader(dataset=valid_dataset, batch_size=batch_size, shuffle=False, \
-                                                drop_last=True, num_workers=1, collate_fn=valid_dataset.collate_function)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print("Using device:", device)
-
-print("Loading models ..")
-vocabsize = encparams["vocab_size"]
-max_length = encparams["max_length"]
-encoder_config = BertConfig(vocab_size = vocabsize,
-                    max_position_embeddings = max_length+64, # this shuold be some large value
-                    num_attention_heads = encparams["num_attn_heads"],
-                    num_hidden_layers = encparams["num_hidden_layers"],
-                    hidden_size = encparams["hidden_size"],
-                    type_vocab_size = 1)
-
-encoder = BertModel(config=encoder_config)
-
-vocabsize = decparams["vocab_size"]
-max_length = decparams["max_length"]
-decoder_config = BertConfig(vocab_size = vocabsize,
-                    max_position_embeddings = max_length+64, # this shuold be some large value
-                    num_attention_heads = decparams["num_attn_heads"],
-                    num_hidden_layers = decparams["num_hidden_layers"],
-                    hidden_size = decparams["hidden_size"],
-                    type_vocab_size = 1,
-                    is_decoder=True)    # Very Important
-
-decoder = BertForMaskedLM(config=decoder_config)
-
-# Define encoder decoder model
-model = EncoderDecoderModel(encoder=encoder, decoder=decoder)
-model.to(device)
-
-def count_parameters(mdl):
-    return sum(p.numel() for p in mdl.parameters() if p.requires_grad)
-
-print(f'The encoder has {count_parameters(encoder):,} trainable parameters')
-print(f'The decoder has {count_parameters(decoder):,} trainable parameters')
-print(f'The model has {count_parameters(model):,} trainable parameters')
-
-optimizer = optim.Adam(model.parameters(), lr=modelparams['lr'])
-criterion = nn.NLLLoss(ignore_index=de_tokenizer.pad_token_id)
-
-num_train_batches = len(train_dataloader)
-num_valid_batches = len(valid_dataloader)
 
 def compute_loss(predictions, targets):
     """Compute our custom loss"""
@@ -121,7 +73,7 @@ def train_model():
 
         lm_labels = de_output.clone()
         out = model(input_ids=en_input, attention_mask=en_masks,
-                                        decoder_input_ids=de_output, decoder_attention_mask=de_masks,lm_labels=lm_labels)
+                                        decoder_input_ids=de_output, decoder_attention_mask=de_masks,labels=lm_labels)
         prediction_scores = out[1]
         predictions = F.log_softmax(prediction_scores, dim=2)
         loss = compute_loss(predictions, de_output)
@@ -150,7 +102,7 @@ def eval_model():
         lm_labels = de_output.clone()
 
         out = model(input_ids=en_input, attention_mask=en_masks,
-                                        decoder_input_ids=de_output, decoder_attention_mask=de_masks,lm_labels=lm_labels)
+                                        decoder_input_ids=de_output, decoder_attention_mask=de_masks,labels=lm_labels)
 
         prediction_scores = out[1]
         predictions = F.log_softmax(prediction_scores, dim=2)
@@ -159,17 +111,72 @@ def eval_model():
 
     print("Mean validation loss:", (epoch_loss / num_valid_batches))
 
+if __name__=="__main__":
+    # MAIN TRAINING LOOP
+    configfile = "config.json"
+    round_point = 3
+    with open(configfile, "r") as f:
+        config = json.load(f)
 
-# MAIN TRAINING LOOP
-for epoch in range(modelparams['num_epochs']):
-    print("Starting epoch", epoch+1)
-    train_model()
-    eval_model()
+    globalparams = config["global_params"]
+    encparams = config["encoder_params"]
+    decparams = config["decoder_params"]
+    modelparams = config["model_params"]
 
-print("Saving model ..")
-save_location = modelparams['model_path']
-model_name = modelparams['model_name']
-if not os.path.exists(save_location):
-    os.makedirs(save_location)
-save_location = os.path.join(save_location, model_name)
-torch.save(model, save_location)
+    en_tok_path = os.getcwd().replace("\\", "/") + "/" + config["encoder_params"][
+            "tokenizer_path"] + f"_{round_point}_{10}/"
+    en_tokenizer = BertTokenizerFast.from_pretrained(en_tok_path)
+    de_tok_path = os.getcwd().replace("\\", "/") + "/" + config["decoder_params"][
+            "tokenizer_path"] + f"_{round_point}_{10}/"
+    de_tokenizer = BertTokenizerFast.from_pretrained(de_tok_path)
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("Using device:", device)
+
+    print("Loading models ..")
+
+    enc_maxlength = encparams["max_length"]
+    dec_maxlength = decparams["max_length"]
+
+    batch_size = modelparams["batch_size"]
+
+
+    path = f"./data/sequences_F_{round_point}_preprocessed.json"
+    with open(path, "r") as data_file:
+        data = json.load(data_file)
+    train_input, test_input, train_label, test_label = train_test_split(data["data"], data["labels"], test_size=0.2,
+                                                                        random_state=42)
+
+    train_dataset = TranslationDataset(train_input, train_label, en_tokenizer, de_tokenizer, enc_maxlength,dec_maxlength)
+    train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=False,
+                                                   drop_last=True, num_workers=1,
+                                                   collate_fn=train_dataset.collate_function)
+
+    valid_dataset = TranslationDataset(test_input, test_label, en_tokenizer, de_tokenizer, enc_maxlength,
+                                       dec_maxlength)
+    valid_dataloader = torch.utils.data.DataLoader(dataset=valid_dataset, batch_size=batch_size, shuffle=False,
+                                                   drop_last=True, num_workers=1,
+                                                   collate_fn=valid_dataset.collate_function)
+
+
+
+    model = get_model()
+
+    optimizer = optim.Adam(model.parameters(), lr=modelparams['lr'])
+    criterion = nn.NLLLoss(ignore_index=de_tokenizer.pad_token_id)
+
+    num_train_batches = len(train_dataloader)
+    num_valid_batches = len(valid_dataloader)
+
+
+    for epoch in tqdm(range(modelparams['num_epochs']), position=0, leave=True):
+        print("Starting epoch", epoch+1)
+        train_model()
+        eval_model()
+
+    print("Saving model ..")
+    save_location = modelparams['model_path']
+    model_name = modelparams['model_name']
+    if not os.path.exists(save_location):
+        os.makedirs(save_location)
+    model.save_pretrained(save_location)

@@ -1,0 +1,50 @@
+*/venv/
+# User-specific stuff:
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/dictionaries
+.idea/vcs.xml
+.idea/jsLibraryMappings.xml
+
+# Sensitive or high-churn files:
+.idea/dataSources.ids
+.idea/dataSources.xml
+.idea/dataSources.local.xml
+.idea/sqlDataSources.xml
+.idea/dynamic.xml
+.idea/uiDesigner.xml
+
+# Gradle:
+.idea/gradle.xml
+.idea/libraries
+
+# Mongo Explorer plugin:
+.idea/mongoSettings.xml
+
+.idea/
+__pycache__/
+
+
+/reproducingResults/pycortex/*
+/reproducingResults/evaluations/*
+
+# Default ignored files
+/shelf/
+/workspace.xml
+/venv
+
+.idea/
+# Datasource local storage ignored files
+/../../../../../../:\Users\zenonas\PycharmProjects\web_parser\.idea/dataSources/
+/dataSources.local.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+/data/
+/my_datasets/data/
+/query_expansion/data/
+/my_datasets/data/
+/datasets/data/
+terrier-assemblies-5.6-jar-with-dependencies.jar
+terrier-python-helper-0.0.6.jar
+/terrier-assemblies-5.6-jar-with-dependencies.jarnm34lwxd.tmp
+/ms_marco_dataset/indices/

@@ -1,15 +1,13 @@
 {
     "global_params" : {
-        "train_en_file" : "data/en_train.sample",
-        "train_de_file" : "data/de_train.sample",
-        "valid_en_file" : "data/en_valid.sample",
-        "valid_de_file" : "data/de_valid.sample"
+        "train_en_file" : "D:/pycharmProject/fMRI-AI-KB/data/decoder_data/sequences_F_test_tokenizer.txt",
+        "train_brain_file" : "D:/pycharmProject/fMRI-AI-KB/data/decoder_data/sequences_F_train_tokenizer.txt"
     },
 
     "encoder_params" : {
-        "tokenizer_path" : "tokenizers/en_tok/",
-        "vocab_size" : 25000,
-        "min_freq" : 3,
+        "tokenizer_path" : "brain_tok",
+        "vocab_size" : 30522,
+        "min_freq" : 2,
         "max_length" : 512,
         "num_attn_heads" : 8,
         "num_hidden_layers" : 8,
@@ -17,9 +15,9 @@
     },
 
     "decoder_params" : {
-        "tokenizer_path" : "tokenizers/de_tok/",
-        "vocab_size" : 25000,
-        "min_freq" : 3,
+        "tokenizer_path" : "en_tok",
+        "vocab_size" : 30522,
+        "min_freq" : 2,
         "max_length" : 256,
         "num_attn_heads" : 8,
         "num_hidden_layers" : 8,
@@ -27,10 +25,10 @@
     },
 
     "model_params" : {
-        "batch_size" : 16,
-        "num_epochs" : 1,
-        "lr": 0.0001,
-        "model_path" : "models/",
+        "batch_size" : 8,
+        "num_epochs" : 5,
+        "lr": 0.000001,
+        "model_path" : "./data/try_2_significant_3",
         "model_name": "encdec.mdl"
     }
 }
